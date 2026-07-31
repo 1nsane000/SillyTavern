@@ -244,6 +244,16 @@ export const reasoning_effort_types = {
     max: 'max',
 };
 
+export const claude_reasoning_effort_types = {
+    auto: 'auto',
+    none: 'none',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'xhigh',
+    max: 'max',
+};
+
 export const verbosity_levels = {
     auto: 'auto',
     low: 'low',
@@ -392,6 +402,7 @@ export const settingsToUpdate = {
     tool_call_recurse_limit: ['#tool_call_recurse_limit', 'tool_call_recurse_limit', false, false],
     show_thoughts: ['#openai_show_thoughts', 'show_thoughts', true, false],
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
+    claude_reasoning_effort: ['#claude_reasoning_effort', 'claude_reasoning_effort', false, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     enable_web_search: ['#openai_enable_web_search', 'enable_web_search', true, false],
     seed: ['#seed_openai', 'seed', false, false],
@@ -505,6 +516,7 @@ const default_settings = {
     custom_prompt_post_processing: custom_prompt_post_processing_types.NONE,
     show_thoughts: true,
     reasoning_effort: reasoning_effort_types.auto,
+    claude_reasoning_effort: claude_reasoning_effort_types.auto,
     verbosity: verbosity_levels.auto,
     enable_web_search: false,
     request_images: false,
@@ -2531,6 +2543,10 @@ function groupModelsByVendor(array, source) {
 function getReasoningEffort(settings = null, model = null) {
     settings = settings ?? oai_settings;
     model = model ?? getChatCompletionModel(settings);
+
+    if (settings.chat_completion_source === chat_completion_sources.CLAUDE) {
+        return settings.claude_reasoning_effort;
+    }
 
     // These sources expect the effort as string.
     const reasoningEffortSources = [
@@ -7087,6 +7103,11 @@ export function initOpenAI() {
 
     $('#openai_reasoning_effort').on('input', function () {
         oai_settings.reasoning_effort = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#claude_reasoning_effort').on('input', function () {
+        oai_settings.claude_reasoning_effort = String($(this).val());
         saveSettingsDebounced();
     });
 

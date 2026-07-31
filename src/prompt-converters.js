@@ -5,9 +5,11 @@ const PROMPT_PLACEHOLDER = getConfigValue('promptPlaceholder', 'Let\'s get start
 
 const REASONING_EFFORT = {
     auto: 'auto',
+    none: 'none',
     low: 'low',
     medium: 'medium',
     high: 'high',
+    xhigh: 'xhigh',
     min: 'min',
     max: 'max',
 };
@@ -1110,7 +1112,7 @@ export function cachingSystemPromptForOpenRouter(messages, ttl = undefined) {
 
 /**
  * Calculate the Claude budget tokens for a given reasoning effort.
- * Returns a string effort level for adaptive thinking (Opus 4.6+), a number for traditional thinking, or null for auto.
+ * Returns a string effort level for adaptive thinking (Opus 4.6+), a number for traditional thinking, or null for auto/none.
  * @param {number} maxTokens Maximum tokens
  * @param {string} reasoningEffort Reasoning effort
  * @param {boolean} stream If streaming is enabled
@@ -1123,6 +1125,8 @@ export function calculateClaudeBudgetTokens(maxTokens, reasoningEffort, stream, 
         switch (reasoningEffort) {
             case REASONING_EFFORT.auto:
                 return null;
+            case REASONING_EFFORT.none:
+                return null;
             case REASONING_EFFORT.min:
                 return 'low';
             case REASONING_EFFORT.low:
@@ -1131,6 +1135,8 @@ export function calculateClaudeBudgetTokens(maxTokens, reasoningEffort, stream, 
                 return 'medium';
             case REASONING_EFFORT.high:
                 return 'high';
+            case REASONING_EFFORT.xhigh:
+                return 'xhigh';
             case REASONING_EFFORT.max:
                 return 'max';
         }
@@ -1141,6 +1147,8 @@ export function calculateClaudeBudgetTokens(maxTokens, reasoningEffort, stream, 
 
     switch (reasoningEffort) {
         case REASONING_EFFORT.auto:
+            return null;
+        case REASONING_EFFORT.none:
             return null;
         case REASONING_EFFORT.min:
             budgetTokens = 1024;
@@ -1153,6 +1161,9 @@ export function calculateClaudeBudgetTokens(maxTokens, reasoningEffort, stream, 
             break;
         case REASONING_EFFORT.high:
             budgetTokens = Math.floor(maxTokens * 0.5);
+            break;
+        case REASONING_EFFORT.xhigh:
+            budgetTokens = Math.floor(maxTokens * 0.75);
             break;
         case REASONING_EFFORT.max:
             budgetTokens = Math.floor(maxTokens * 0.95);

@@ -242,6 +242,7 @@ async function sendClaudeRequest(request, response) {
         const noPrefillModel = /^claude-(opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
         const isAdaptiveModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model) || (enableAdaptiveThinking && /^claude-(opus-4-6|sonnet-4-6)/.test(request.body.model));
         const noSamplingModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
+        const defaultThinkingModel = isFableModel || /^claude-(opus-5|sonnet-5)/.test(request.body.model);
         let fixThinkingPrefill = false;
         // Add custom stop sequences
         const stopSequences = [];
@@ -326,10 +327,16 @@ async function sendClaudeRequest(request, response) {
 
         const reasoningEffort = request.body.reasoning_effort;
         const includeReasoning = Boolean(request.body.include_reasoning);
-        const budgetTokens = calculateClaudeBudgetTokens(requestBody.max_tokens, reasoningEffort, requestBody.stream, isAdaptiveModel);
+        // Fable always thinks and rejects an explicit thinking configuration, so "none" can't be honored there.
+        const disableThinking = reasoningEffort === 'none' && !isFableModel;
+        const budgetTokens = disableThinking ? null : calculateClaudeBudgetTokens(requestBody.max_tokens, reasoningEffort, requestBody.stream, isAdaptiveModel);
 
-        // Adaptive thinking: returns a string effort level (like Gemini 3)
-        if (useThinking && typeof budgetTokens === 'string') {
+        if (useThinking && disableThinking) {
+            if (isAdaptiveModel) {
+                requestBody.thinking = { type: 'disabled' };
+            }
+        } else if (useThinking && typeof budgetTokens === 'string') {
+            // Adaptive thinking: returns a string effort level (like Gemini 3)
             fixThinkingPrefill = true;
             requestBody.thinking = { type: 'adaptive' };
             if (noSamplingModel && includeReasoning) {
@@ -339,8 +346,8 @@ async function sendClaudeRequest(request, response) {
             requestBody.output_config.effort = budgetTokens;
             // top_k is not allowed in adaptive mode
             delete requestBody.top_k;
-        } else if (useThinking && isFableModel && reasoningEffort === 'auto' && includeReasoning) {
-            // Fable auto thinking is already enabled, but readable summaries require an explicit display request.
+        } else if (useThinking && defaultThinkingModel && reasoningEffort === 'auto' && includeReasoning) {
+            // Auto thinking is already enabled, but readable summaries require an explicit display request.
             fixThinkingPrefill = true;
             requestBody.thinking = { type: 'adaptive', display: 'summarized' };
         } else if (useThinking && Number.isInteger(budgetTokens)) {

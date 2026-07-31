@@ -2155,7 +2155,7 @@
                                             </strong>
                                         </div>
                                     </div>
-                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,claude,xai,makersuite,vertexai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes,nanogpt,deepseek">
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,xai,makersuite,vertexai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes,nanogpt,deepseek">
                                         <div class="flex-container oneline-dropdown" title="Constrains effort on reasoning for reasoning models.&#10;Reducing reasoning effort can result in faster responses and fewer tokens used on reasoning in a response." data-i18n="[title]Constrains effort on reasoning for reasoning models.">
                                             <label for="openai_reasoning_effort">
                                                 <span data-i18n="Reasoning Effort">Reasoning Effort</span>
@@ -2175,9 +2175,6 @@
                                             <strong class="toggle-description justifyLeft marginBot5" data-source="openrouter">
                                                 Request model reasoning = Off with Reasoning Effort = Minimum disables reasoning entirely on models that support that, but can cause errors with some models.
                                             </strong>
-                                            <div class="toggle-description justifyLeft marginBot5" data-source="claude" data-i18n="Selects an effort level on adaptive-thinking models. On older Claude models, it allocates a portion of the response length to thinking. Auto does not request thinking.">
-                                                Selects an effort level on adaptive-thinking models. On older Claude models, it allocates a portion of the response length to thinking. Auto does not request thinking.
-                                            </div>
                                             <div class="toggle-description justifyLeft marginBot5" data-source="makersuite,vertexai">
                                                 <span data-i18n="Sets a dynamic reasoning depth level for thinking (Flash 3/Pro 3). High and low are supported by both, minimal and medium are Flash 3 only. Auto lets the model decide.">
                                                     Sets a dynamic reasoning depth level for thinking (Flash 3/Pro 3). High and low are supported by both, minimal and medium are Flash 3 only. Auto lets the model decide.
@@ -2185,6 +2182,32 @@
                                                 <br>
                                                 <span data-i18n="Allocates a portion of the response length for thinking (Flash 2.5/Pro 2.5) (min: 0/128 tokens, low: 10%, medium: 25%, high: 50%, max: 24576/32768 tokens). Auto lets the model decide.">
                                                     Allocates a portion of the response length for thinking (Flash 2.5/Pro 2.5) (min: 0/128 tokens, low: 10%, medium: 25%, high: 50%, max: 24576/32768 tokens). Auto lets the model decide.
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="claude">
+                                        <div class="flex-container oneline-dropdown" title="Constrains effort on reasoning for Claude models.&#10;Reducing reasoning effort can result in faster responses and fewer tokens used on reasoning in a response." data-i18n="[title]Constrains effort on reasoning for Claude models.">
+                                            <label for="claude_reasoning_effort">
+                                                <span data-i18n="Reasoning Effort">Reasoning Effort</span>
+                                                <a href="https://docs.sillytavern.app/usage/prompts/reasoning/#reasoning-effort" target="_blank" class="opacity50p fa-solid fa-circle-question"></a>
+                                            </label>
+                                            <select id="claude_reasoning_effort">
+                                                <option data-i18n="claude_reasoning_effort_auto" value="auto">Auto</option>
+                                                <option data-i18n="claude_reasoning_effort_none" value="none">None</option>
+                                                <option data-i18n="claude_reasoning_effort_low" value="low">Low</option>
+                                                <option data-i18n="claude_reasoning_effort_medium" value="medium">Medium</option>
+                                                <option data-i18n="claude_reasoning_effort_high" value="high">High</option>
+                                                <option data-i18n="claude_reasoning_effort_xhigh" value="xhigh">Extra High</option>
+                                                <option data-i18n="claude_reasoning_effort_maximum" value="max">Maximum</option>
+                                            </select>
+                                            <div class="toggle-description justifyLeft marginBot5">
+                                                <span data-i18n="Selects an effort level on adaptive-thinking models. On older Claude models, it allocates a portion of the response length to thinking.">
+                                                    Selects an effort level on adaptive-thinking models. On older Claude models, it allocates a portion of the response length to thinking.
+                                                </span>
+                                                <br>
+                                                <span data-i18n="Auto sends no thinking configuration, so models that think by default (Opus 5, Sonnet 5, Fable 5) still do. None turns thinking off explicitly; Fable 5 always thinks and ignores it.">
+                                                    Auto sends no thinking configuration, so models that think by default (Opus 5, Sonnet 5, Fable 5) still do. None turns thinking off explicitly; Fable 5 always thinks and ignores it.
                                                 </span>
                                             </div>
                                         </div>
