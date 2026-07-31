@@ -6172,9 +6172,9 @@ export function isImageInliningSupported() {
         // Claude
         'claude-3',
         'claude-fable',
-        'claude-opus-4',
-        'claude-sonnet-4',
-        'claude-haiku-4',
+        'claude-opus',
+        'claude-sonnet',
+        'claude-haiku',
         // Cohere
         'c4ai-aya-vision',
         'command-a-vision',
