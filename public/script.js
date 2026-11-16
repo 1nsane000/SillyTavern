@@ -6301,7 +6301,7 @@ export function extractJsonFromData(data, { mainApi = null, chatCompletionSource
             const text = extractMessageFromData(data, mainApi);
             switch (chatCompletionSource) {
                 case chat_completion_sources.CLAUDE:
-                    result = data?.content?.find(x => x.type === 'tool_use')?.input;
+                    result = data?.content?.find(x => x.type === 'tool_use')?.input ?? tryParse(text);
                     break;
                 case chat_completion_sources.PERPLEXITY:
                     result = tryParse(removeReasoningFromString(text));

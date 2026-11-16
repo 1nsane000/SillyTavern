@@ -234,15 +234,17 @@ async function sendClaudeRequest(request, response) {
         const useSystemPrompt = Boolean(request.body.use_sysprompt);
         const convertedPrompt = convertClaudeMessages(request.body.messages, request.body.assistant_prefill, useSystemPrompt, useTools, getPromptNames(request));
         // Unanchored to also match prefixed ids passed through proxies, e.g. 'anthropic/claude-fable-5'
-        const isFableModel = /claude-fable/.test(request.body.model);
-        const useThinking = /^claude-(3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
-        const useWebSearch = /^claude-(3-5|3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model) && Boolean(request.body.enable_web_search);
+        const isFableModel = /claude-(fable|mythos)/.test(request.body.model);
+        const useThinking = /^claude-(3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model);
+        const useWebSearch = /^claude-(3-5|3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model) && Boolean(request.body.enable_web_search);
         const isLimitedSampling = /^claude-(opus-4-1|sonnet-4-5|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6)/.test(request.body.model);
-        const useVerbosity = /^claude-(opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
-        const noPrefillModel = /^claude-(opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
-        const isAdaptiveModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model) || (enableAdaptiveThinking && /^claude-(opus-4-6|sonnet-4-6)/.test(request.body.model));
-        const noSamplingModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|fable-5)/.test(request.body.model);
-        const defaultThinkingModel = isFableModel || /^claude-(opus-5|sonnet-5)/.test(request.body.model);
+        const useVerbosity = /^claude-(opus-4-5|opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model);
+        const noPrefillModel = /^claude-(opus-4-6|sonnet-4-6|opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model);
+        const isAdaptiveModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model) || (enableAdaptiveThinking && /^claude-(opus-4-6|sonnet-4-6)/.test(request.body.model));
+        const noSamplingModel = /^claude-(opus-4-7|opus-4-8|opus-5|sonnet-5|haiku-5|fable-5|mythos-5)/.test(request.body.model);
+        const defaultThinkingModel = isFableModel || /^claude-(opus-5|sonnet-5|haiku-5)/.test(request.body.model);
+        const alwaysThinkingModel = isFableModel || /^claude-opus-5-5/.test(request.body.model);
+        const noForcedToolModel = /^claude-(opus-5-5|sonnet-5-5|fable-5-1|fable-5-2|mythos-5-1|mythos-5-2)/.test(request.body.model);
         let fixThinkingPrefill = false;
         // Add custom stop sequences
         const stopSequences = [];
@@ -283,8 +285,10 @@ async function sendClaudeRequest(request, response) {
             }
         }
 
-        // Structured output is a forced tool
-        if (request.body.json_schema) {
+        // Structured output is a forced tool, except on models that reject forced tool use
+        if (request.body.json_schema && noForcedToolModel) {
+            requestBody.output_config = { format: { type: 'json_schema', schema: request.body.json_schema.value } };
+        } else if (request.body.json_schema) {
             const jsonTool = {
                 name: request.body.json_schema.name,
                 description: request.body.json_schema.description || 'Well-formed JSON object',
@@ -327,13 +331,14 @@ async function sendClaudeRequest(request, response) {
 
         const reasoningEffort = request.body.reasoning_effort;
         const includeReasoning = Boolean(request.body.include_reasoning);
-        // Fable always thinks and rejects an explicit thinking configuration, so "none" can't be honored there.
-        const disableThinking = reasoningEffort === 'none' && !isFableModel;
+        // Fable, Mythos and Opus 5.5 always think and reject disabling it, so "none" can't be honored there.
+        const disableThinking = reasoningEffort === 'none' && !alwaysThinkingModel;
         const budgetTokens = disableThinking ? null : calculateClaudeBudgetTokens(requestBody.max_tokens, reasoningEffort, requestBody.stream, isAdaptiveModel);
 
         if (useThinking && disableThinking) {
             if (isAdaptiveModel) {
-                requestBody.thinking = { type: 'disabled' };
+                // Sonnet 5.5 rejects "disabled"; "between_tools" is its lowest setting.
+                requestBody.thinking = { type: /^claude-sonnet-5-5/.test(request.body.model) ? 'between_tools' : 'disabled' };
             }
         } else if (useThinking && typeof budgetTokens === 'string') {
             // Adaptive thinking: returns a string effort level (like Gemini 3)

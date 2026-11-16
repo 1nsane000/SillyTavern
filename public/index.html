@@ -2206,8 +2206,8 @@
                                                     Selects an effort level on adaptive-thinking models. On older Claude models, it allocates a portion of the response length to thinking.
                                                 </span>
                                                 <br>
-                                                <span data-i18n="Auto sends no thinking configuration, so models that think by default (Opus 5, Sonnet 5, Fable 5) still do. None turns thinking off explicitly; Fable 5 always thinks and ignores it.">
-                                                    Auto sends no thinking configuration, so models that think by default (Opus 5, Sonnet 5, Fable 5) still do. None turns thinking off explicitly; Fable 5 always thinks and ignores it.
+                                                <span data-i18n="Auto sends no thinking configuration, so models that think by default (Claude 5 and later) still do. None turns thinking off explicitly; Fable, Mythos and Opus 5.5 always think and ignore it.">
+                                                    Auto sends no thinking configuration, so models that think by default (Claude 5 and later) still do. None turns thinking off explicitly; Fable, Mythos and Opus 5.5 always think and ignore it.
                                                 </span>
                                             </div>
                                         </div>
@@ -3205,11 +3205,17 @@
                                 <h4 data-i18n="Claude Model">Claude Model</h4>
                                 <select id="model_claude_select">
                                     <optgroup label="Versions">
+                                        <option value="claude-fable-5-2">claude-fable-5-2</option>
                                         <option value="claude-opus-5-5">claude-opus-5-5</option>
+                                        <option value="claude-sonnet-5-5">claude-sonnet-5-5</option>
+                                        <option value="claude-haiku-5-5">claude-haiku-5-5</option>
                                         <option value="claude-opus-5">claude-opus-5</option>
                                         <option value="claude-sonnet-5">claude-sonnet-5</option>
                                         <option value="claude-fable-5-1">claude-fable-5-1</option>
                                         <option value="claude-fable-5">claude-fable-5</option>
+                                        <option value="claude-mythos-5-2">claude-mythos-5-2</option>
+                                        <option value="claude-mythos-5-1">claude-mythos-5-1</option>
+                                        <option value="claude-mythos-5">claude-mythos-5</option>
                                         <option value="claude-opus-4-8">claude-opus-4-8</option>
                                         <option value="claude-opus-4-7">claude-opus-4-7</option>
                                         <option value="claude-opus-4-6">claude-opus-4-6</option>
