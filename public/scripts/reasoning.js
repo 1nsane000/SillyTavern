@@ -5,7 +5,7 @@ import { chat, closeMessageEditor, event_types, eventSource, main_api, messageFo
 import { getRegexedString, regex_placement } from './extensions/regex/engine.js';
 import { getCurrentLocale, t, translate } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
-import { chat_completion_sources, getChatCompletionModel, oai_settings } from './openai.js';
+import { chat_completion_sources, getChatCompletionModel, getClaudeThinkingSignatures, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { performFuzzySearch, power_user } from './power-user.js';
 import { getPresetManager } from './preset-manager.js';
@@ -187,6 +187,10 @@ export function extractReasoningSignatureFromData(data, {
     const source = chatCompletionSource ?? oai_settings.chat_completion_source;
     const isGemini = source === chat_completion_sources.MAKERSUITE || source === chat_completion_sources.VERTEXAI;
     const isOpenRouter = source === chat_completion_sources.OPENROUTER;
+
+    if (source === chat_completion_sources.CLAUDE && oai_settings.claude_preserve_thinking && Array.isArray(data?.content)) {
+        return getClaudeThinkingSignatures(data.content).signature;
+    }
 
     if (!isGemini && !isOpenRouter) {
         return null;

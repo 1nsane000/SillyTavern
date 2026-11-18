@@ -1,7 +1,7 @@
 import { DOMPurify } from '../lib.js';
 
 import { addOneMessage, chat, event_types, eventSource, getGeneratingApi, getGeneratingModel, main_api, saveChatConditional, system_avatar, systemUserName } from '../script.js';
-import { chat_completion_sources, custom_prompt_post_processing_types, getChatCompletionModel, model_list, oai_settings } from './openai.js';
+import { chat_completion_sources, custom_prompt_post_processing_types, getChatCompletionModel, getClaudeThinkingSignatures, model_list, oai_settings } from './openai.js';
 import { Popup } from './popup.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
@@ -529,6 +529,9 @@ export class ToolManager {
                         console.warn('[ToolManager] Failed to apply input JSON delta:', error);
                     }
                 }
+                if (Object.hasOwn(toolSignatures, targetToolCall.id)) {
+                    targetToolCall.signature = toolSignatures[targetToolCall.id];
+                }
             }
         }
         if (Array.isArray(parsed?.candidates)) {
@@ -696,7 +699,7 @@ export class ToolManager {
         const getRandomId = () => Math.random().toString(36).substring(2);
         const isClaudeToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isClaudeToolCall) : c?.input && c?.name && c?.id;
         const isGoogleToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isGoogleToolCall) : c?.name && c?.args;
-        const convertClaudeToolCall = c => ({ id: c.id, function: { name: c.name, arguments: c.input } });
+        const convertClaudeToolCall = c => ({ id: c.id, function: { name: c.name, arguments: c.input }, signature: c.signature });
         const convertGoogleToolCall = (c, signature = null) => ({ id: getRandomId(), function: { name: c.name, arguments: c.args }, signature });
 
         // Parsed tool calls from streaming data
@@ -743,7 +746,8 @@ export class ToolManager {
 
         // Claude tool calls to OpenAI tool calls
         if (Array.isArray(data?.content)) {
-            const content = data.content.filter(c => c.type === 'tool_use').map(convertClaudeToolCall);
+            const toolSignatures = oai_settings.claude_preserve_thinking ? getClaudeThinkingSignatures(data.content).toolSignatures : {};
+            const content = data.content.filter(c => c.type === 'tool_use').map(c => convertClaudeToolCall({ ...c, signature: toolSignatures[c.id] }));
 
             if (content) {
                 return content;

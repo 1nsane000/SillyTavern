@@ -188,6 +188,20 @@ export function convertClaudePrompt(messages, addAssistantPostfix, addAssistantP
 }
 
 /**
+ * Parses Claude thinking blocks serialized by the frontend into a message or tool call signature.
+ * @param {any} signature Serialized thinking blocks
+ * @returns {object[]} Thinking blocks
+ */
+function parseClaudeThinkingBlocks(signature) {
+    try {
+        const blocks = typeof signature === 'string' ? JSON.parse(signature) : null;
+        return Array.isArray(blocks) ? blocks.filter(b => b?.type === 'thinking' || b?.type === 'redacted_thinking') : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
  * Convert ChatML objects into working with Anthropic's new Messaging API.
  * @param {object[]} messages Array of messages
  * @param {string}   prefillString User determined prefill string
@@ -235,12 +249,12 @@ export function convertClaudeMessages(messages, prefillString, useSysPrompt, use
     const parse = (str) => typeof str === 'string' ? JSON.parse(str) : str;
     messages.forEach((message) => {
         if (message.role === 'assistant' && message.tool_calls) {
-            message.content = message.tool_calls.map((tc) => ({
+            message.content = message.tool_calls.flatMap((tc) => [...parseClaudeThinkingBlocks(tc.signature), {
                 type: 'tool_use',
                 id: tc.id,
                 name: tc.function.name,
                 input: parse(tc.function.arguments),
-            }));
+            }]);
         }
 
         if (message.role === 'tool') {
@@ -308,10 +322,15 @@ export function convertClaudeMessages(messages, prefillString, useSysPrompt, use
             });
         }
 
+        if (message.role === 'assistant' && message.signature) {
+            message.content.unshift(...parseClaudeThinkingBlocks(message.signature));
+        }
+
         // Remove offending properties
         delete message.name;
         delete message.tool_calls;
         delete message.tool_call_id;
+        delete message.signature;
     });
 
     // Images in assistant messages should be moved to the next user message
@@ -352,6 +371,22 @@ export function convertClaudeMessages(messages, prefillString, useSysPrompt, use
         } else {
             mergedMessages.push(message);
         }
+    });
+
+    // A tool call repeats the thinking blocks of the reply text merged before it
+    mergedMessages.forEach((message) => {
+        const seen = new Set();
+        message.content = message.content.filter((content) => {
+            if (content.type !== 'thinking' && content.type !== 'redacted_thinking') {
+                return true;
+            }
+            const key = content.signature ?? content.data;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
     });
 
     if (!useTools) {

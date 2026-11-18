@@ -403,6 +403,9 @@ export const settingsToUpdate = {
     show_thoughts: ['#openai_show_thoughts', 'show_thoughts', true, false],
     reasoning_effort: ['#openai_reasoning_effort', 'reasoning_effort', false, false],
     claude_reasoning_effort: ['#claude_reasoning_effort', 'claude_reasoning_effort', false, false],
+    claude_prompt_cache: ['#claude_prompt_cache', 'claude_prompt_cache', true, false],
+    claude_cache_ttl: ['#claude_cache_ttl', 'claude_cache_ttl', false, false],
+    claude_preserve_thinking: ['#claude_preserve_thinking', 'claude_preserve_thinking', true, false],
     verbosity: ['#openai_verbosity', 'verbosity', false, false],
     enable_web_search: ['#openai_enable_web_search', 'enable_web_search', true, false],
     seed: ['#seed_openai', 'seed', false, false],
@@ -517,6 +520,9 @@ const default_settings = {
     show_thoughts: true,
     reasoning_effort: reasoning_effort_types.auto,
     claude_reasoning_effort: claude_reasoning_effort_types.auto,
+    claude_prompt_cache: false,
+    claude_cache_ttl: '5m',
+    claude_preserve_thinking: false,
     verbosity: verbosity_levels.auto,
     enable_web_search: false,
     request_images: false,
@@ -2841,6 +2847,8 @@ export async function createGenerationParameters(settings, model, type, messages
     if (settings.chat_completion_source === chat_completion_sources.CLAUDE) {
         generate_data.top_k = Number(settings.top_k_openai);
         generate_data.use_sysprompt = settings.use_sysprompt;
+        generate_data.claude_prompt_cache = Boolean(settings.claude_prompt_cache);
+        generate_data.claude_cache_ttl = settings.claude_cache_ttl;
         generate_data.stop = getCustomStoppingStrings(); // Claude shouldn't have limits on stop strings.
         // Don't add a prefill on quiet gens (summarization) and when using continue prefill.
         if (type !== 'quiet' && !(type === 'continue' && settings.continue_prefill)) {
@@ -3167,6 +3175,67 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
 }
 
 /**
+ * Serializes the Claude thinking blocks preceding the reply text and each tool call, so they can be sent back unmodified.
+ * A tool call gets every block since the previous tool call, the server drops the ones repeated by the reply text.
+ * @param {any[]} content Claude response content blocks
+ * @returns {{ signature: string?, toolSignatures: Record<string, string> }} Serialized blocks of the reply and of each tool call ID
+ */
+export function getClaudeThinkingSignatures(content) {
+    const leading = [];
+    const toolSignatures = {};
+    let pending = [];
+    let isLeading = true;
+    for (const block of content.filter(Boolean)) {
+        if (block.type === 'thinking' || block.type === 'redacted_thinking') {
+            if (!block.signature && !block.data) {
+                continue;
+            }
+            const copy = block.type === 'thinking'
+                ? { type: 'thinking', thinking: block.thinking ?? '', signature: block.signature }
+                : { type: 'redacted_thinking', data: block.data };
+            pending.push(copy);
+            if (isLeading) {
+                leading.push(copy);
+            }
+            continue;
+        }
+        isLeading = false;
+        if (block.type === 'tool_use') {
+            if (pending.length) {
+                toolSignatures[block.id] = JSON.stringify(pending);
+            }
+            pending = [];
+        }
+    }
+    return { signature: leading.length ? JSON.stringify(leading) : null, toolSignatures };
+}
+
+/**
+ * Rebuilds Claude content blocks from streaming events to capture the thinking blocks.
+ * @param {any} data Streaming event
+ * @param {any} state Streaming state
+ */
+function collectClaudeThinkingBlocks(data, state) {
+    state.claudeBlocks ??= [];
+    const blocks = state.claudeBlocks;
+    if (data?.type === 'content_block_start' && data.content_block) {
+        blocks[data.index] = { ...data.content_block };
+    } else if (data?.type === 'content_block_delta' && blocks[data.index]?.type === 'thinking') {
+        const block = blocks[data.index];
+        if (data.delta?.type === 'thinking_delta') {
+            block.thinking = (block.thinking ?? '') + data.delta.thinking;
+        }
+        if (data.delta?.type === 'signature_delta') {
+            block.signature = (block.signature ?? '') + data.delta.signature;
+        }
+    } else if (data?.type === 'content_block_stop') {
+        const { signature, toolSignatures } = getClaudeThinkingSignatures(blocks);
+        state.signature = signature ?? '';
+        Object.assign(state.toolSignatures, toolSignatures);
+    }
+}
+
+/**
  * Extracts the reply from the response data from a chat completions-like source
  * @param {object} data Response data from the chat completions-like source
  * @param {object} state Additional state to keep track of
@@ -3182,6 +3251,9 @@ export function getStreamingReply(data, state, { chatCompletionSource = null, ov
     if (chat_completion_source === chat_completion_sources.CLAUDE) {
         if (show_thoughts) {
             state.reasoning += data?.delta?.thinking || '';
+        }
+        if (oai_settings.claude_preserve_thinking) {
+            collectClaudeThinkingBlocks(data, state);
         }
         return data?.delta?.text || '';
     } else if ([chat_completion_sources.MAKERSUITE, chat_completion_sources.VERTEXAI].includes(chat_completion_source)) {
@@ -6410,7 +6482,8 @@ export function isReasoningSignatureSupported(settings = oai_settings) {
     const isGoogle = [chat_completion_sources.VERTEXAI, chat_completion_sources.MAKERSUITE].includes(settings.chat_completion_source);
     // Need a more crunchy check for OpenRouter: look for Gemini models
     const isOpenRouterGemini = settings.chat_completion_source === chat_completion_sources.OPENROUTER && /google\/gemini/i.test(settings.openrouter_model);
-    return isGoogle || isOpenRouterGemini;
+    const isClaudePreserveThinking = settings.chat_completion_source === chat_completion_sources.CLAUDE && settings.claude_preserve_thinking;
+    return isGoogle || isOpenRouterGemini || isClaudePreserveThinking;
 }
 
 /**
@@ -7109,6 +7182,21 @@ export function initOpenAI() {
 
     $('#claude_reasoning_effort').on('input', function () {
         oai_settings.claude_reasoning_effort = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#claude_prompt_cache').on('input', function () {
+        oai_settings.claude_prompt_cache = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#claude_cache_ttl').on('input', function () {
+        oai_settings.claude_cache_ttl = String($(this).val());
+        saveSettingsDebounced();
+    });
+
+    $('#claude_preserve_thinking').on('input', function () {
+        oai_settings.claude_preserve_thinking = !!$(this).prop('checked');
         saveSettingsDebounced();
     });
 

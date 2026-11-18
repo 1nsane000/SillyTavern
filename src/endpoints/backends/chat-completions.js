@@ -245,6 +245,11 @@ async function sendClaudeRequest(request, response) {
         const defaultThinkingModel = isFableModel || /^claude-(opus-5|sonnet-5|haiku-5)/.test(request.body.model);
         const alwaysThinkingModel = isFableModel || /^claude-opus-5-5/.test(request.body.model);
         const noForcedToolModel = /^claude-(opus-5-5|sonnet-5-5|fable-5-1|fable-5-2|mythos-5-1|mythos-5-2)/.test(request.body.model);
+        const preservedThinkingModel = /^claude-(opus-5-5|sonnet-5-5|haiku-5-5|fable-5-1|fable-5-2|mythos-5-1|mythos-5-2)/.test(request.body.model);
+        const forcePromptCache = Boolean(request.body.claude_prompt_cache);
+        const useSystemPromptCache = enableSystemPromptCache || forcePromptCache;
+        const promptCacheDepth = forcePromptCache && cachingAtDepth === -1 ? 0 : cachingAtDepth;
+        const promptCacheTTL = forcePromptCache ? (request.body.claude_cache_ttl === '1h' ? '1h' : '5m') : cacheTTL;
         let fixThinkingPrefill = false;
         // Add custom stop sequences
         const stopSequences = [];
@@ -264,8 +269,8 @@ async function sendClaudeRequest(request, response) {
             stream: request.body.stream,
         };
         if (useSystemPrompt) {
-            if (enableSystemPromptCache && Array.isArray(convertedPrompt.systemPrompt) && convertedPrompt.systemPrompt.length) {
-                convertedPrompt.systemPrompt[convertedPrompt.systemPrompt.length - 1].cache_control = { type: 'ephemeral', ttl: cacheTTL };
+            if (useSystemPromptCache && Array.isArray(convertedPrompt.systemPrompt) && convertedPrompt.systemPrompt.length) {
+                convertedPrompt.systemPrompt[convertedPrompt.systemPrompt.length - 1].cache_control = { type: 'ephemeral', ttl: promptCacheTTL };
             }
 
             requestBody.system = convertedPrompt.systemPrompt;
@@ -280,8 +285,8 @@ async function sendClaudeRequest(request, response) {
                 .map(tool => tool.function)
                 .map(fn => ({ name: fn.name, description: fn.description, input_schema: flattenSchema(fn.parameters, request.body.chat_completion_source) }));
 
-            if (enableSystemPromptCache && requestBody.tools.length) {
-                requestBody.tools[requestBody.tools.length - 1].cache_control = { type: 'ephemeral', ttl: cacheTTL };
+            if (useSystemPromptCache && requestBody.tools.length) {
+                requestBody.tools[requestBody.tools.length - 1].cache_control = { type: 'ephemeral', ttl: promptCacheTTL };
             }
         }
 
@@ -306,11 +311,11 @@ async function sendClaudeRequest(request, response) {
             requestBody.tools = [...webSearchTool, ...(requestBody.tools || [])];
         }
 
-        if (cachingAtDepth !== -1) {
-            cachingAtDepthForClaude(convertedPrompt.messages, cachingAtDepth, cacheTTL);
+        if (promptCacheDepth !== -1) {
+            cachingAtDepthForClaude(convertedPrompt.messages, promptCacheDepth, promptCacheTTL);
         }
 
-        if (enableSystemPromptCache || cachingAtDepth !== -1) {
+        if (useSystemPromptCache || promptCacheDepth !== -1) {
             betaHeaders.push('prompt-caching-2024-07-31');
             betaHeaders.push('extended-cache-ttl-2025-04-11');
         }
@@ -378,6 +383,20 @@ async function sendClaudeRequest(request, response) {
 
         if ((fixThinkingPrefill || noPrefillModel) && convertedPrompt.messages.length && convertedPrompt.messages[convertedPrompt.messages.length - 1].role === 'assistant') {
             convertedPrompt.messages[convertedPrompt.messages.length - 1].role = 'user';
+        }
+
+        // Thinking blocks sent back by the frontend are only valid in assistant turns of thinking-enabled requests
+        const isThinkingBlock = (/** @type {any} */ c) => c.type === 'thinking' || c.type === 'redacted_thinking';
+        const isThinkingOn = requestBody.thinking ? ['adaptive', 'enabled'].includes(requestBody.thinking.type) : defaultThinkingModel;
+        convertedPrompt.messages.forEach((/** @type {any} */ m) => {
+            if (!isThinkingOn || m.role !== 'assistant') {
+                m.content = m.content.filter(c => !isThinkingBlock(c));
+            }
+        });
+        if (preservedThinkingModel && isThinkingOn && convertedPrompt.messages.some(m => m.content.some(isThinkingBlock))) {
+            // Drop blocks invalidated by prompt changes (lorebooks, macros, edits) instead of failing with a 400
+            requestBody.thinking = { ...(requestBody.thinking ?? { type: 'adaptive' }), block_binding: { prefix_mismatch_behavior: 'drop_block' } };
+            betaHeaders.push('thinking-binding-controls-2026-08-01');
         }
 
         // Verbosity = 'effort' (same values as OpenAI) - only if not already set by adaptive thinking
